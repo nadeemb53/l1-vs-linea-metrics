@@ -1,4 +1,3 @@
-// app/stress-test/page.tsx
 'use client'
 
 import { useState } from 'react'
@@ -11,15 +10,27 @@ import type { NetworkMetrics, StressTestConfig } from './../../types'
 export default function StressTestPage() {
   const [isRunning, setIsRunning] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [currentMetrics, setCurrentMetrics] = useState<Record<string, NetworkMetrics>>()
-  const [finalResults, setFinalResults] = useState<Record<string, NetworkMetrics>>()
+  const [results, setResults] = useState<Record<string, NetworkMetrics>>()
 
   const handleStartTest = async (config: StressTestConfig) => {
     setIsRunning(true)
     setProgress(0)
-    setFinalResults(undefined)
+    setResults(undefined)
     
     try {
+      // Start progress timer based on test duration
+      const startTime = Date.now()
+      const progressInterval = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000
+        const currentProgress = Math.min((elapsed / config.duration) * 100, 100)
+        setProgress(currentProgress)
+        
+        if (currentProgress >= 100) {
+          clearInterval(progressInterval)
+        }
+      }, 1000)
+
+      // Run the stress test
       const response = await fetch('/api/stress-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -30,26 +41,11 @@ export default function StressTestPage() {
         throw new Error('Stress test failed')
       }
 
-      // Setup SSE or polling for progress updates
-      const pollInterval = setInterval(async () => {
-        const metricsResponse = await fetch('/api/stress-test/metrics')
-        const metrics = await metricsResponse.json()
-        
-        if (metrics) {
-          setCurrentMetrics(metrics)
-          // Calculate overall progress based on elapsed time
-          const elapsed = (Date.now() - metrics.startTime) / 1000
-          const progress = Math.min((elapsed / config.duration) * 100, 100)
-          setProgress(progress)
-
-          if (progress >= 100) {
-            clearInterval(pollInterval)
-            const results = await response.json()
-            setFinalResults(results)
-          }
-        }
-      }, 1000)
-
+      clearInterval(progressInterval)
+      setProgress(100)
+      
+      const results = await response.json()
+      setResults(results)
     } catch (error) {
       console.error('Stress test failed:', error)
     } finally {
@@ -70,14 +66,15 @@ export default function StressTestPage() {
           <Card className="p-6 metrics-card">
             <StressTestProgress 
               progress={progress}
-              currentMetrics={currentMetrics} 
+              isRunning={isRunning}
+              selectedNetworks={results ? Object.keys(results) : []}
             />
           </Card>
         )}
 
-        {finalResults && (
+        {results && (
           <Card className="p-6 metrics-card lg:col-span-2">
-            <StressTestResults results={finalResults} />
+            <StressTestResults results={results} />
           </Card>
         )}
       </div>

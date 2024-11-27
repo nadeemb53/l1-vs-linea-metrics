@@ -1,6 +1,32 @@
+// lib/metricsStorage.ts
 import { NetworkData } from '@/types'
 
 const STORAGE_KEY = 'network_metrics_data'
+
+export interface StressTestResult {
+  startTime: string
+  endTime: string
+  config: {
+    duration: number
+    tps: number
+    transactionType: string
+  }
+  results: {
+    [network: string]: {
+      avgTps: number
+      avgBlockTime: number
+      avgGasUsed: number
+      successRate: number
+      transactions: {
+        hash: string
+        timestamp: number
+        status: 'pending' | 'success' | 'failed'
+        gasUsed?: bigint
+        blockTime?: number
+      }[]
+    }
+  }
+}
 
 export interface StoredData {
   timestamp: string
@@ -14,6 +40,7 @@ export interface StoredData {
       successRate: number
     }
   }
+  stressTests?: StressTestResult[]
 }
 
 export function storeMetricsData(data: NetworkData) {
@@ -42,15 +69,52 @@ export function storeMetricsData(data: NetworkData) {
       return acc
     }, {} as StoredData['summaries'])
 
+    // Get existing stored data to preserve stress test results
+    const existingData = getStoredMetricsData()
+    
     const storedData: StoredData = {
       timestamp: new Date().toISOString(),
       metrics: data,
-      summaries
+      summaries,
+      // Preserve existing stress test results if they exist
+      stressTests: existingData?.stressTests || []
     }
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storedData))
   } catch (error) {
     console.error('Error storing metrics data:', error)
+  }
+}
+
+export function storeStressTestResult(
+  config: StressTestResult['config'],
+  results: StressTestResult['results']
+) {
+  try {
+    const existingData = getStoredMetricsData() || {
+      timestamp: new Date().toISOString(),
+      metrics: {},
+      summaries: {},
+      stressTests: []
+    }
+
+    const stressTest: StressTestResult = {
+      startTime: new Date(Date.now() - config.duration * 1000).toISOString(),
+      endTime: new Date().toISOString(),
+      config,
+      results
+    }
+
+    existingData.stressTests = [
+      ...(existingData.stressTests || []),
+      stressTest
+    ]
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(existingData))
+    return existingData
+  } catch (error) {
+    console.error('Error storing stress test result:', error)
+    throw error
   }
 }
 

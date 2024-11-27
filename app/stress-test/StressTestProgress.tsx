@@ -1,14 +1,13 @@
-// app/stress-test/StressTestProgress.tsx
-import { NetworkMetrics } from './../../types'
-
 interface StressTestProgressProps {
   progress: number
-  currentMetrics?: Record<string, NetworkMetrics>
+  isRunning: boolean
+  selectedNetworks: string[]
 }
 
 export function StressTestProgress({ 
   progress, 
-  currentMetrics 
+  isRunning,
+  selectedNetworks 
 }: StressTestProgressProps) {
   return (
     <div className="space-y-4">
@@ -18,7 +17,7 @@ export function StressTestProgress({
         <div className="flex mb-2 items-center justify-between">
           <div>
             <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200">
-              Progress
+              {isRunning ? 'Running Test...' : 'Test Complete'}
             </span>
           </div>
           <div className="text-right">
@@ -34,25 +33,18 @@ export function StressTestProgress({
           />
         </div>
 
-        {currentMetrics && (
-          <div className="space-y-2 mt-4">
-            {Object.entries(currentMetrics).map(([network, metrics]) => (
-              <div key={network} className="text-sm">
-                <div className="font-medium">{network.toUpperCase()}</div>
-                <div className="grid grid-cols-2 gap-2 text-gray-600">
-                  <div>Transactions: {metrics.transactions.length}</div>
-                  <div>Success Rate: {metrics.successRate.toFixed(1)}%</div>
-                  <div>Current TPS: {metrics.avgTps.toFixed(1)}</div>
-                  <div>
-                    Pending: {
-                      metrics.transactions.filter(tx => tx.status === 'pending').length
-                    }
-                  </div>
-                </div>
+        <div className="space-y-2 mt-4">
+          {selectedNetworks.map((network) => (
+            <div key={network} className="text-sm">
+              <div className="font-medium">
+                {network.toUpperCase()}
+                <span className="ml-2 text-blue-600">
+                  {isRunning ? 'Running...' : 'Complete'}
+                </span>
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

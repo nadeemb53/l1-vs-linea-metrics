@@ -1,27 +1,6 @@
 import { ethers } from 'ethers'
 import { networks } from './blockchain'
-
-export interface StressTestConfig {
-  duration: number // in seconds
-  tps: number
-  transactionType: 'transfer' | 'erc20' | 'nft' | 'complex'
-}
-
-export interface TransactionInfo {
-  hash: string
-  timestamp: number
-  status: 'pending' | 'success' | 'failed'
-  gasUsed?: bigint
-  blockTime?: number
-}
-
-export interface NetworkMetrics {
-  avgTps: number
-  successRate: number
-  avgBlockTime: number
-  avgGasUsed: number
-  transactions: TransactionInfo[]
-}
+import {TransactionInfo, NetworkMetrics, StressTestConfig} from './../types';
 
 class NetworkStressTester {
   private currentNonce: number
