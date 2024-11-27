@@ -65,9 +65,9 @@ export function StressTestForm({ onStart, disabled }: StressTestFormProps) {
             className="w-full rounded-md border border-gray-300 p-2"
           >
             <option value="transfer">Simple Transfer</option>
-            <option value="erc20">ERC20 Transfer</option>
+            {/* <option value="erc20">ERC20 Transfer</option>
             <option value="nft">NFT Mint</option>
-            <option value="complex">Complex Contract Interaction</option>
+            <option value="complex">Complex Contract Interaction</option> */}
           </select>
         </div>
 

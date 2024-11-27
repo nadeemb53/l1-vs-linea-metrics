@@ -4,7 +4,7 @@ import { ethers } from 'ethers'
 export const networks = {
   l2: {
     name: 'Custom L2',
-    rpc: process.env.L2_RPC || 'https://rpc.blast.io',
+    rpc: process.env.L2_RPC || 'https://sepolia.base.org',
     contracts: {
       erc20: '',
       nft: '',

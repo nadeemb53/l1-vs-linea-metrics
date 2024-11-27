@@ -96,7 +96,6 @@ function generateCoverPage(doc: jsPDF, data: StoredData) {
       `TPS: ${formatTPS(metrics.averageTPS)}`,
       `Block Time: ${formatBlockTime(metrics.averageBlockTime)}`,
       `Gas Cost: ${formatGasPrice(metrics.averageGasCost)}`,
-      `Success Rate: ${formatPercent(metrics.successRate)}`,
     ], 30, yPos + 35)
 
     yPos += 100
@@ -136,11 +135,6 @@ function generateMetricsSummary(doc: jsPDF, data: StoredData) {
       formatLatency(metrics.l2.averageLatency),
       formatLatency(metrics.linea.averageLatency),
       formatDifference(metrics.l2.averageLatency, metrics.linea.averageLatency)
-    ],
-    ['Success Rate',
-      formatPercent(metrics.l2.successRate),
-      formatPercent(metrics.linea.successRate),
-      formatDifference(metrics.l2.successRate, metrics.linea.successRate)
     ],
   ]
 
@@ -183,10 +177,6 @@ function generateStressTestResults(doc: jsPDF, data: StoredData & { stressTests:
       ['Average TPS', 
         formatTPS(test.results.l2?.avgTps || 0),
         formatTPS(test.results.linea?.avgTps || 0)
-      ],
-      ['Success Rate',
-        formatPercent(test.results.l2?.successRate || 0),
-        formatPercent(test.results.linea?.successRate || 0)
       ],
       ['Average Block Time',
         formatBlockTime(test.results.l2?.avgBlockTime || 0),
