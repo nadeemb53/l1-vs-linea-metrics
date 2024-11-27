@@ -1,60 +1,41 @@
 import { NextResponse } from 'next/server'
-import { headers } from 'next/headers'
+import { broadcastSseMessage, sseControllers, encoder } from './sseUtils'
 
 export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
+export const runtime = 'edge'
 
 export async function GET() {
-  const response = new NextResponse(
-    new ReadableStream({
-      start(controller) {
-        const connectionId = Math.random().toString(36).substring(7)
-        console.log(`Client connected: ${connectionId}`)
-        
-        // Initialize controllers if not exists
-        if (!global.stressTestControllers) {
-          global.stressTestControllers = new Map()
-        }
-        
-        let isConnected = true
-        global.stressTestControllers.set(connectionId, controller)
-        console.log(`Active connections: ${global.stressTestControllers.size}`)
+  const stream = new ReadableStream({
+    start(controller) {
+      sseControllers.add(controller)
+      console.log(`Client connected. Active connections: ${sseControllers.size}`)
 
-        // Keep connection alive
-        const keepAlive = setInterval(() => {
-          if (!isConnected) {
-            clearInterval(keepAlive)
-            return
-          }
+      // Send initial connection message
+      controller.enqueue(encoder.encode('data: {"type":"connected"}\n\n'))
 
-          try {
-            controller.enqueue(new TextEncoder().encode(': keepalive\n\n'))
-          } catch (error) {
-            console.error('Error sending keepalive:', error)
-            clearInterval(keepAlive)
-            isConnected = false
-            global.stressTestControllers.delete(connectionId)
-          }
-        }, 15000)
-
-        // Cleanup function
-        return () => {
-          isConnected = false
+      const keepAlive = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode('data: {"type":"keepalive"}\n\n'))
+        } catch (error) {
+          console.error('Error sending keepalive:', error)
           clearInterval(keepAlive)
-          global.stressTestControllers.delete(connectionId)
-          console.log(`Client disconnected: ${connectionId}`)
-          console.log(`Remaining connections: ${global.stressTestControllers.size}`)
+          sseControllers.delete(controller)
         }
-      }
-    }),
-    {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-      },
-    }
-  )
+      }, 5000)
 
-  return response
+      return () => {
+        clearInterval(keepAlive)
+        sseControllers.delete(controller)
+        console.log(`Client disconnected. Remaining connections: ${sseControllers.size}`)
+      }
+    }
+  })
+
+  return new NextResponse(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+    },
+  })
 } 

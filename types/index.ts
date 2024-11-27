@@ -56,6 +56,7 @@ export interface NetworkMetrics {
   avgBlockTime: number
   avgGasUsed: number
   transactions: TransactionInfo[]
+  testCompleted?: boolean
 }
 
 export interface StressTestResult {

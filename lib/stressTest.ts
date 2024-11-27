@@ -1,6 +1,7 @@
 import { ethers } from 'ethers'
 import { networks } from './blockchain'
 import {TransactionInfo, NetworkMetrics, StressTestConfig} from '@/types';
+import { broadcastSseMessage } from '../app/api/stress-test/status/sseUtils'
 
 type TransactionType = StressTestConfig['transactionType']
 
@@ -41,58 +42,87 @@ class NetworkStressTester {
     }
   }
 
-  private async getNextNonce(): Promise<number> {
+  async sendBatchTransactions(
+    type: TransactionType, 
+    network: string, 
+    count: number,
+    targetTps: number
+  ): Promise<void> {
     if (this.nextNonce === null) {
       this.nextNonce = await this.wallet.getNonce()
     }
-    return this.nextNonce++
-  }
 
-  async sendTransaction(type: TransactionType, network: string): Promise<void> {
-    const nonce = await this.getNextNonce()
-    
-    try {
-      const tx = await this.wallet.sendTransaction({
-        to: ethers.Wallet.createRandom().address,
-        value: ethers.parseEther('0.0001'),
-        nonce,
-        maxFeePerGas: ethers.parseUnits('1', 'gwei'),
-        maxPriorityFeePerGas: ethers.parseUnits('1', 'gwei'),
+    const batchSize = 10
+    const batches = Math.ceil(count / batchSize)
+    const batchInterval = 1000 / (targetTps / batchSize) // ms between batches
+
+    for (let i = 0; i < batches; i++) {
+      const batchStart = Date.now()
+      const batchCount = Math.min(batchSize, count - i * batchSize)
+      
+      const transactions = Array(batchCount).fill(0).map((_, index) => {
+        const nonce = this.nextNonce! + index
+        return {
+          to: ethers.Wallet.createRandom().address,
+          value: ethers.parseEther('0.0001'),
+          nonce,
+          maxFeePerGas: ethers.parseUnits('2', 'gwei'),
+          maxPriorityFeePerGas: ethers.parseUnits('2', 'gwei'),
+          type: 2, // EIP-1559
+          gasLimit: 21000,
+        }
       })
 
-      console.log(`[${type}] Transaction sent: ${tx.hash} (nonce: ${nonce})`)
-      this.pendingTxs.add(tx.hash)
+      const promises = transactions.map(tx => this.sendTransaction(tx, type))
+      await Promise.all(promises)
+
+      this.nextNonce += batchCount
+
+      // Wait for the next batch interval
+      const elapsed = Date.now() - batchStart
+      const waitTime = Math.max(0, batchInterval - elapsed)
+      if (waitTime > 0) {
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+      }
+    }
+  }
+
+  private async sendTransaction(tx: ethers.TransactionRequest, type: TransactionType) {
+    try {
+      const response = await this.wallet.sendTransaction(tx)
+      console.log(`[${type}] Transaction sent: ${response.hash} (nonce: ${tx.nonce})`)
       
+      this.pendingTxs.add(response.hash)
       this.metrics.transactions.push({
-        hash: tx.hash,
+        hash: response.hash,
         timestamp: Date.now(),
         status: 'pending',
         type,
-        nonce
+        nonce: tx.nonce as number
       })
 
-      // Handle transaction confirmation asynchronously
-      tx.wait().then(receipt => {
-        this.pendingTxs.delete(tx.hash)
-        const txRecord = this.metrics.transactions.find(t => t.hash === receipt?.hash)
+      response.wait().then(receipt => {
+        if (!receipt) return;
+        this.pendingTxs.delete(response.hash)
+        const txRecord = this.metrics.transactions.find(t => t.hash === receipt.hash)
         if (txRecord) {
-          txRecord.status = receipt?.status ? 'success' : 'failed'
-          txRecord.gasUsed = receipt?.gasUsed
-          txRecord.blockNumber = receipt?.blockNumber
+          txRecord.status = receipt.status ? 'success' : 'failed'
+          txRecord.gasUsed = receipt.gasUsed
+          txRecord.blockNumber = receipt.blockNumber
           txRecord.blockTime = (Date.now() - txRecord.timestamp) / 1000
         }
       }).catch(error => {
-        console.error(`Failed to confirm transaction ${tx.hash}:`, error)
-        this.pendingTxs.delete(tx.hash)
-        const failedTx = this.metrics.transactions.find(t => t.hash === tx.hash)
+        console.error(`Failed to confirm transaction ${response.hash}:`, error)
+        this.pendingTxs.delete(response.hash)
+        const failedTx = this.metrics.transactions.find(t => t.hash === response.hash)
         if (failedTx) {
           failedTx.status = 'failed'
         }
       })
 
     } catch (error) {
-      console.error(`Failed to send transaction with nonce ${nonce}:`, error)
-      const failedTx = this.metrics.transactions.find(t => t.nonce === nonce)
+      console.error(`Failed to send transaction with nonce ${tx.nonce}:`, error)
+      const failedTx = this.metrics.transactions.find(t => t.nonce === tx.nonce)
       if (failedTx) {
         failedTx.status = 'failed'
       }
@@ -117,6 +147,13 @@ class NetworkStressTester {
       avgGasUsed: successfulTxs.reduce((sum, tx) => sum + Number(tx.gasUsed || 0), 0) / successfulTxs.length || 0,
       transactions: this.metrics.transactions
     }
+  }
+
+  private emitTxLog(tx: TxLogMessage) {
+    broadcastSseMessage({
+      type: 'txLog',
+      tx
+    })
   }
 
   // ... rest of the class implementation ...
@@ -146,36 +183,6 @@ export class StressTest {
     this.providers = providers
   }
 
-  private emitUpdate(network: string, stats: any) {
-    if (!global.stressTestControllers || global.stressTestControllers.size === 0) {
-      console.log('No SSE controllers available')
-      return
-    }
-
-    try {
-      const message = {
-        type: 'transactions',
-        transactions: [{
-          network,
-          ...stats
-        }]
-      }
-      
-      const encodedMessage = new TextEncoder().encode(`data: ${JSON.stringify(message)}\n\n`)
-      
-      global.stressTestControllers.forEach((controller, id) => {
-        try {
-          controller.enqueue(encodedMessage)
-        } catch (error) {
-          console.error(`Failed to send message to client ${id}:`, error)
-          global.stressTestControllers.delete(id)
-        }
-      })
-    } catch (error) {
-      console.error('Error emitting update:', error)
-    }
-  }
-
   async runTest(network: string, config: StressTestConfig): Promise<NetworkMetrics> {
     this.isRunning = true
     const startTime = Date.now()
@@ -186,59 +193,40 @@ export class StressTest {
       const totalTxToSend = config.tps * config.duration
       let txSent = 0
       let lastProgressUpdate = Date.now()
-      let secondStart = Date.now()
-      let txThisSecond = 0
+      let testCompleted = false
 
-      // Send transactions as quickly as possible while maintaining TPS rate
-      while (txSent < totalTxToSend) {
+      while (txSent < totalTxToSend && Date.now() < endTime) {
+        const remainingTx = totalTxToSend - txSent
+        const batchSize = Math.min(remainingTx, config.tps) // Send up to 1 second worth of transactions
+
+        await tester.sendBatchTransactions(config.transactionType, network, batchSize, config.tps)
+        txSent += batchSize
+
+        // Update progress
         const now = Date.now()
-        const elapsed = now - secondStart
-        
-        // If we haven't hit our TPS target for this second, send more
-        if (txThisSecond < config.tps) {
-          // Send transactions in smaller batches to avoid overwhelming the node
-          const remainingInSecond = config.tps - txThisSecond
-          const batchSize = Math.min(remainingInSecond, 5) // Send up to 5 tx at once
+        if (now - lastProgressUpdate >= 1000) {
+          const progress = (txSent / totalTxToSend) * 100
+          console.log(`Progress: ${progress.toFixed(1)}% - Sent ${txSent}/${totalTxToSend} transactions`)
           
-          const promises = Array(batchSize)
-            .fill(0)
-            .map(() => tester.sendTransaction(config.transactionType, network))
-
-          await Promise.all(promises)
-          txSent += batchSize
-          txThisSecond += batchSize
-
-          // Emit progress update
-          if (now - lastProgressUpdate >= 1000) {
-            const progress = (txSent / totalTxToSend) * 100
-            console.log(`Progress: ${progress.toFixed(1)}% - Sent ${txSent}/${totalTxToSend} transactions`)
-            
-            this.emitUpdate(network, {
-              sent: txSent,
-              pending: tester.pendingTransactions,
-              confirmed: txSent - tester.pendingTransactions,
-              failed: 0,
-              progress,
-              latestBlock: await this.providers[network].getBlockNumber()
-            })
-            
-            lastProgressUpdate = now
-          }
-        }
-
-        // If we've completed this second's quota, wait for next second
-        if (elapsed >= 1000) {
-          secondStart = now
-          txThisSecond = 0
-        } else if (txThisSecond >= config.tps) {
-          // Wait for the remainder of the second if we've hit our TPS target
-          await new Promise(resolve => setTimeout(resolve, 1000 - elapsed))
-          secondStart = Date.now()
-          txThisSecond = 0
+          this.emitUpdate(network, {
+            sent: txSent,
+            pending: tester.pendingTransactions,
+            confirmed: txSent - tester.pendingTransactions,
+            failed: 0,
+            progress,
+            latestBlock: await this.providers[network].getBlockNumber()
+          })
+          
+          lastProgressUpdate = now
         }
       }
 
-      console.log(`All ${totalTxToSend} transactions sent. Waiting for confirmations...`)
+      testCompleted = txSent >= totalTxToSend
+
+      console.log(`${txSent} out of ${totalTxToSend} transactions sent. Waiting for confirmations...`)
+      if (!testCompleted) {
+        console.warn(`Test ended before all transactions could be sent. Only ${txSent} out of ${totalTxToSend} were sent.`)
+      }
 
       // Wait for pending transactions to complete (up to 60 seconds)
       const maxWait = Date.now() + 60_000
@@ -250,9 +238,23 @@ export class StressTest {
         }
       }
 
-      return tester.calculateMetrics()
+      const metrics = tester.calculateMetrics()
+      return {
+        ...metrics,
+        testCompleted // Add this flag to the returned metrics
+      }
     } finally {
       this.isRunning = false
     }
+  }
+
+  private emitUpdate(network: string, stats: any) {
+    broadcastSseMessage({
+      type: 'transactions',
+      transactions: [{
+        network,
+        ...stats
+      }]
+    })
   }
 }

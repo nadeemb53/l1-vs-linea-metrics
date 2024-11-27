@@ -35,11 +35,10 @@ export default function StressTestPage() {
     setTransactions([])
     setTxLogs([])
     
-    let eventSource: EventSource | null = null;
+    let eventSource: EventSource | undefined;
     
-    try {
-      // Setup SSE before starting the test
-      eventSource = new EventSource('/api/stress-test/status')
+    const setupEventSource = () => {
+      eventSource = new EventSource('/api/stress-test/status') as EventSource;
       
       eventSource.onopen = () => {
         console.log('SSE connection opened')
@@ -47,27 +46,41 @@ export default function StressTestPage() {
       
       eventSource.onerror = (error) => {
         console.error('SSE error:', error)
+        if (eventSource) {
+          eventSource.close()
+          setTimeout(setupEventSource, 1000)
+        }
       }
       
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
-          console.log('SSE message:', data)
+          console.log('SSE message received:', data)
 
-          if (data.type === 'transactions') {
+          if (data.type === 'keepalive' || data.type === 'connected') {
+            return
+          }
+
+          if (data.type === 'transactions' && data.transactions?.[0]) {
+            console.log('Updating transactions:', data.transactions)
             setTransactions(data.transactions)
-            if (data.transactions[0]?.progress) {
+            if (typeof data.transactions[0].progress === 'number') {
+              console.log('Setting progress:', data.transactions[0].progress)
               setProgress(data.transactions[0].progress)
             }
-          } else if (data.type === 'txLog') {
+          } else if (data.type === 'txLog' && data.tx) {
+            console.log('New transaction log:', data.tx)
             setTxLogs(prev => [data.tx, ...prev].slice(0, 100))
           }
         } catch (error) {
           console.error('Error parsing SSE message:', error)
         }
       }
+    }
 
-      // Start the stress test
+    try {
+      setupEventSource()
+
       const response = await fetch('/api/stress-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -80,15 +93,12 @@ export default function StressTestPage() {
 
       const results = await response.json()
       setResults(results)
-
-      // Store stress test results
       await storeStressTestResult({
         duration: config.duration,
         tps: config.tps,
         transactionType: config.transactionType,
         networks: config.networks
       }, results)
-
     } catch (error) {
       console.error('Stress test failed:', error)
     } finally {
