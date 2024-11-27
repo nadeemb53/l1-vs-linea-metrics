@@ -8,7 +8,7 @@ interface StressTestFormProps {
 
 export function StressTestForm({ onStart, disabled }: StressTestFormProps) {
   const [config, setConfig] = useState<StressTestConfig>({
-    duration: 300,
+    duration: 10,
     tps: 10,
     transactionType: 'transfer',
     networks: ['l2', 'linea'],

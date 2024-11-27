@@ -20,7 +20,7 @@ import {
   formatLatency,
   formatPercent,
 } from '@/lib/utils'
-import { storeMetricsData, getStoredMetricsData } from '@/lib/metricsStorage'
+import { storeMetricsData, getStoredMetricsData, clearStoredMetrics } from '@/lib/metricsStorage'
 
 const metrics = new BlockchainMetrics()
 
@@ -42,6 +42,7 @@ export function Dashboard() {
   const [data, setData] = useState<NetworkData>(initialData)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isResetting, setIsResetting] = useState(false)
 
   // Load stored data on mount
   useEffect(() => {
@@ -61,20 +62,15 @@ export function Dashboard() {
         const newData = { ...data }
 
         await Promise.all(networks.map(async (network) => {
-          const [baseMetrics, extendedMetrics] = await Promise.all([
-            metrics.getBaseMetrics(network),
-            metrics.getExtendedMetrics(network)
-          ])
+          const baseMetrics = await metrics.getBaseMetrics(network)
 
           // Update metrics
-          Object.entries({ ...baseMetrics, ...extendedMetrics }).forEach(([key, value]) => {
+          Object.entries(baseMetrics).forEach(([key, value]) => {
             if (value !== undefined && value !== null) {
               newData[key as keyof NetworkData] = [
-                ...newData[key as keyof NetworkData].filter(item => 
-                  new Date(item.timestamp).getTime() > timestamp.getTime() - 15 * 60 * 1000 // Keep last 15 minutes
-                ),
+                ...(newData[key as keyof NetworkData] || []),
                 { timestamp, value, network }
-              ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+              ]
             }
           })
         }))
@@ -96,15 +92,29 @@ export function Dashboard() {
   }, [data, isLoading])
 
   const getLatestValues = (metricKey: keyof NetworkData) => {
-    const metrics = data[metricKey]
+    const metrics = data[metricKey] || []
     if (!metrics.length) return { l2: 0, linea: 0 }
     
-    const sorted = [...metrics].sort((a, b) => 
+    const sorted = metrics.sort((a, b) => 
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     )
     return {
       l2: sorted.find(d => d.network === 'l2')?.value || 0,
       linea: sorted.find(d => d.network === 'linea')?.value || 0
+    }
+  }
+
+  const handleReset = () => {
+    setIsResetting(true)
+    try {
+      clearStoredMetrics()
+      setData(initialData)
+      setError(null)
+    } catch (error) {
+      console.error('Failed to reset metrics:', error)
+      setError('Failed to reset metrics data')
+    } finally {
+      setIsResetting(false)
     }
   }
 
@@ -131,7 +141,17 @@ export function Dashboard() {
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6 max-w-7xl">
-      <h1 className="text-2xl font-bold mb-6 px-2">Network Performance Dashboard</h1>
+      <div className="flex justify-between items-center px-2">
+        <h1 className="text-2xl font-bold">Network Performance Dashboard</h1>
+        <button
+          onClick={handleReset}
+          disabled={isResetting}
+          className="py-2 px-4 rounded-md text-white font-medium bg-red-500 
+                     hover:bg-red-600 transition-all duration-300 disabled:opacity-50"
+        >
+          {isResetting ? 'Resetting...' : 'Reset Data'}
+        </button>
+      </div>
 
       {/* Performance Metrics Section */}
       <section>
@@ -153,7 +173,7 @@ export function Dashboard() {
           <MetricsCard
             title="Gas Cost"
             {...getLatestValues('gasCost')}
-            formatValue={(v) => formatGasPrice(Number(ethers.formatUnits(v, 'gwei')))}
+            formatValue={formatGasPrice}
             inverted={true}
             className="min-h-[160px]"
           />

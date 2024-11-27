@@ -1,5 +1,4 @@
 'use client'
-import { ethers } from 'ethers'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { MetricData } from '@/types'
 
@@ -14,11 +13,11 @@ export function GasChart({ data }: Props) {
     )
     
     if (existingEntry) {
-      existingEntry[curr.network] = parseFloat(ethers.formatUnits(curr.value, 'gwei'))
+      existingEntry[curr.network] = curr.value
     } else {
       acc.push({
         timestamp: new Date(curr.timestamp).getTime(),
-        [curr.network]: parseFloat(ethers.formatUnits(curr.value, 'gwei')),
+        [curr.network]: curr.value,
       })
     }
     
@@ -27,21 +26,21 @@ export function GasChart({ data }: Props) {
 
   return (
     <ResponsiveContainer width="100%" height={300}>
-    <BarChart width={500} height={300} data={formattedData}>
-      <CartesianGrid strokeDasharray="3 3" />
-      <XAxis
-        dataKey="timestamp"
-        tickFormatter={(value) => new Date(value).toLocaleTimeString()}
-      />
-      <YAxis label={{ value: 'Gas Price (Gwei)', angle: -90, position: 'insideLeft' }} />
-      <Tooltip
-        labelFormatter={(value) => new Date(value).toLocaleTimeString()}
-        formatter={(value: number) => [`${value.toFixed(2)} Gwei`, 'Gas Price']}
-      />
-      <Legend />
-      <Bar dataKey="l2" fill="#8884d8" name="L2" />
-      <Bar dataKey="linea" fill="#82ca9d" name="Linea" />
-    </BarChart>
+      <BarChart width={500} height={300} data={formattedData}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis
+          dataKey="timestamp"
+          tickFormatter={(value) => new Date(value).toLocaleTimeString()}
+        />
+        <YAxis label={{ value: 'Gas Price (Gwei)', angle: -90, position: 'insideLeft' }} />
+        <Tooltip
+          labelFormatter={(value) => new Date(value).toLocaleTimeString()}
+          formatter={(value: number) => [`${value.toFixed(4)} Gwei`, 'Gas Price']}
+        />
+        <Legend />
+        <Bar dataKey="l2" fill="#8884d8" name="L2" />
+        <Bar dataKey="linea" fill="#82ca9d" name="Linea" />
+      </BarChart>
     </ResponsiveContainer>
   )
 }

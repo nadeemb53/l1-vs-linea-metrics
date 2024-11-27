@@ -20,12 +20,15 @@ export function MetricsCard({
   title, 
   l2, 
   linea, 
-  formatValue, 
+  formatValue = (v: number) => v.toString(), 
   comparison = 'vs Linea',
   inverted = false,
-  className 
+  className = ''
 }: MetricsCardProps) {
-  const { change, trend, description } = calculateComparison(l2, linea, inverted)
+  const l2Value = typeof l2 === 'number' ? l2 : 0;
+  const lineaValue = typeof linea === 'number' ? linea : 0;
+  
+  const { change, trend, description } = calculateComparison(l2Value, lineaValue, inverted)
 
   return (
     <Card className={cn("overflow-hidden", className)}>
@@ -56,7 +59,7 @@ export function MetricsCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">
-          {formatValue(l2)}
+          {formatValue(l2Value)}
         </div>
         <p className="text-xs text-muted-foreground mt-1">
           {comparison}
@@ -66,7 +69,7 @@ export function MetricsCard({
                       border border-gray-200 border-opacity-50">
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">
-              Linea: {formatValue(linea)}
+              Linea: {formatValue(lineaValue)}
             </p>
             <p className={cn(
               "text-xs font-medium",

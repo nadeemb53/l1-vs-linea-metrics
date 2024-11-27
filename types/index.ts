@@ -9,13 +9,13 @@ export interface NetworkData {
   blockTime: MetricData[]
   gasCost: MetricData[]
   networkLatency: MetricData[]
-  successRate: MetricData[]
-  totalTransactions: MetricData[]
-  proofGenTime: MetricData[]
-  stateSyncLatency: MetricData[]
-  reorgFrequency: MetricData[]
-  blockPropagation: MetricData[]
-  nodeResponseTime: MetricData[]
+  successRate?: MetricData[]
+  totalTransactions?: MetricData[]
+  proofGenTime?: MetricData[]
+  stateSyncLatency?: MetricData[]
+  reorgFrequency?: MetricData[]
+  blockPropagation?: MetricData[]
+  nodeResponseTime?: MetricData[]
 }
 
 export interface ExtendedMetrics {
@@ -43,8 +43,11 @@ export interface TransactionInfo {
   hash: string
   timestamp: number
   status: 'pending' | 'success' | 'failed'
+  type: string
+  nonce: number
   gasUsed?: bigint
   blockTime?: number
+  blockNumber?: number
 }
 
 export interface NetworkMetrics {
@@ -62,21 +65,10 @@ export interface StressTestResult {
     duration: number
     tps: number
     transactionType: string
+    networks: string[]
   }
   results: {
-    [network: string]: {
-      avgTps: number
-      avgBlockTime: number
-      avgGasUsed: number
-      successRate: number
-      transactions: {
-        hash: string
-        timestamp: number
-        status: 'pending' | 'success' | 'failed'
-        gasUsed?: bigint
-        blockTime?: number
-      }[]
-    }
+    [network: string]: NetworkMetrics
   }
 }
 

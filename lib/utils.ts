@@ -29,7 +29,10 @@ export function formatWithUnits(value: number, unit: string): string {
 
 // Formats gas prices
 export function formatGasPrice(value: number): string {
-  return `${formatNumber(value)} Gwei`
+  if (value < 0.01) {
+    return `${value.toFixed(9)} Gwei`;
+  }
+  return `${value.toFixed(4)} Gwei`;
 }
 
 // Formats percentages

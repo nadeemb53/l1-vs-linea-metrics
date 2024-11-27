@@ -1,6 +1,5 @@
 // lib/blockchain.ts
 import { ethers } from 'ethers'
-import { ExtendedMetrics } from '@/types'
 
 export const networks = {
   l2: {
@@ -14,7 +13,7 @@ export const networks = {
   },
   linea: {
     name: 'Linea',
-    rpc: 'https://rpc.linea.build',
+    rpc: 'https://rpc.sepolia.linea.build',
     contracts: {
       erc20: '',
       nft: '',
@@ -25,65 +24,23 @@ export const networks = {
 
 export class BlockchainMetrics {
   private providers: Record<string, ethers.Provider>
-  private blockCache: Map<string, { block: ethers.Block, timestamp: number }>
-  private requestCache: Map<string, { promise: Promise<any>, timestamp: number }>
-  private lastRequestTime: Record<string, number> = {}
 
   constructor() {
     this.providers = {
       l2: new ethers.JsonRpcProvider(networks.l2.rpc),
       linea: new ethers.JsonRpcProvider(networks.linea.rpc),
     }
-    this.blockCache = new Map()
-    this.requestCache = new Map()
-  }
-
-  private async throttleRequest(network: string): Promise<void> {
-    const now = Date.now()
-    const lastRequest = this.lastRequestTime[network] || 0
-    const delay = Math.max(0, 200 - (now - lastRequest)) // Minimum 200ms between requests
-    if (delay > 0) {
-      await new Promise(resolve => setTimeout(resolve, delay))
-    }
-    this.lastRequestTime[network] = Date.now()
-  }
-
-  private async cachedRequest<T>(
-    network: string,
-    key: string,
-    request: () => Promise<T>,
-    ttl: number = 1000 // Cache TTL in ms
-  ): Promise<T> {
-    const cacheKey = `${network}-${key}`
-    const cached = this.requestCache.get(cacheKey)
-    const now = Date.now()
-
-    if (cached && now - cached.timestamp < ttl) {
-      return cached.promise
-    }
-
-    await this.throttleRequest(network)
-    const promise = request().catch(error => {
-      this.requestCache.delete(cacheKey)
-      throw error
-    })
-
-    this.requestCache.set(cacheKey, { promise, timestamp: now })
-    return promise
   }
 
   async getBaseMetrics(network: string) {
     try {
-      // Get latest block once and reuse
-      const latestBlock = await this.cachedRequest(
-        network,
-        'latest-block',
-        () => this.providers[network].getBlock('latest')
-      )
-
+      console.log(`\n[${network}] Fetching base metrics...`)
+      
+      const latestBlock = await this.providers[network].getBlock('latest')
       if (!latestBlock) {
         throw new Error('Failed to fetch latest block')
       }
+      console.log(`[${network}] Latest block:`, latestBlock.number)
 
       const [tps, blockTime, gasCost, networkLatency] = await Promise.all([
         this.getTPS(network, latestBlock),
@@ -92,183 +49,86 @@ export class BlockchainMetrics {
         this.getNetworkLatency(network)
       ])
 
+      console.log(`[${network}] Metrics calculated:`, {
+        tps,
+        blockTime,
+        gasCost,
+        networkLatency
+      })
+
       return { tps, blockTime, gasCost, networkLatency }
     } catch (error) {
-      console.error(`Error fetching base metrics for ${network}:`, error)
+      console.error(`[${network}] Error fetching base metrics:`, error)
       return { tps: 0, blockTime: 0, gasCost: 0, networkLatency: 0 }
     }
   }
 
   async getTPS(network: string, latestBlock?: ethers.Block): Promise<number> {
     try {
-      const block = latestBlock || await this.cachedRequest(
-        network,
-        'latest-block',
-        () => this.providers[network].getBlock('latest')
-      )
-
+      const block = latestBlock || await this.providers[network].getBlock('latest')
       if (!block) return 0
 
-      const txCount = block.transactions.length
-      const timeSpan = 12 // Average block time in seconds, adjust if needed
+      // Get the previous block to calculate actual time difference
+      const prevBlock = await this.providers[network].getBlock(block.number - 1)
+      if (!prevBlock) return 0
 
-      return txCount / timeSpan
+      const txCount = block.transactions.length
+      const timeSpan = block.timestamp - prevBlock.timestamp
+
+      const tps = timeSpan > 0 ? txCount / timeSpan : 0
+      console.log(`[${network}] TPS calculation:`, {
+        blockNumber: block.number,
+        transactions: txCount,
+        timeSpan,
+        tps
+      })
+
+      return tps
     } catch (error) {
-      console.error(`Error calculating TPS for ${network}:`, error)
+      console.error(`[${network}] Error calculating TPS:`, error)
       return 0
     }
   }
 
   async getBlockTime(network: string, latestBlock?: ethers.Block): Promise<number> {
     try {
-      const block = latestBlock || await this.cachedRequest(
-        network,
-        'latest-block',
-        () => this.providers[network].getBlock('latest')
-      )
-
+      const block = latestBlock || await this.providers[network].getBlock('latest')
       if (!block) return 0
 
-      const prevBlocks = await Promise.all(
-        Array.from({ length: 5 }, (_, i) => 
-          this.cachedRequest(
-            network,
-            `block-${block.number - i - 1}`,
-            () => this.providers[network].getBlock(block.number - i - 1)
-          )
-        )
-      )
+      // Get the previous block for a simple time difference
+      const prevBlock = await this.providers[network].getBlock(block.number - 1)
+      if (!prevBlock) return 0
 
-      let totalTime = 0
-      let count = 0
+      // Calculate time difference directly between consecutive blocks
+      const blockTime = block.timestamp - prevBlock.timestamp
       
-      // Calculate time difference between consecutive blocks
-      for (let i = 0; i < prevBlocks.length - 1; i++) {
-        if (prevBlocks[i] && prevBlocks[i + 1]) {
-          const timeDiff = Math.abs(prevBlocks[i]!.timestamp - prevBlocks[i + 1]!.timestamp)
-          // Filter out anomalous values (> 30 seconds)
-          if (timeDiff <= 30) {
-            totalTime += timeDiff
-            count++
-          }
-        }
-      }
+      console.log(`[${network}] Block time calculation:`, {
+        blockNumber: block.number,
+        currentTimestamp: block.timestamp,
+        prevTimestamp: prevBlock.timestamp,
+        blockTime
+      })
 
-      return count > 0 ? totalTime / count : 0
+      return blockTime
     } catch (error) {
-      console.error(`Error calculating block time for ${network}:`, error)
+      console.error(`[${network}] Error calculating block time:`, error)
       return 0
     }
   }
 
   async getGasCosts(network: string): Promise<number> {
     try {
-      const feeData = await this.cachedRequest(
-        network,
-        'gas-price',
-        () => this.providers[network].getFeeData()
-      )
+      const feeData = await this.providers[network].getFeeData()
+      const gasPrice = feeData.gasPrice ? Number(ethers.formatUnits(feeData.gasPrice, 'gwei')) : 0
       
-      return feeData.gasPrice ? Number(feeData.gasPrice.toString()) : 0
-    } catch (error) {
-      console.error(`Error fetching gas costs for ${network}:`, error)
-      return 0
-    }
-  }
-
-  async getExtendedMetrics(network: string): Promise<Partial<ExtendedMetrics>> {
-    try {
-      const [
-        successRate,
-        totalTransactions,
-        proofGenTime,
-        stateSyncLatency,
-        reorgFrequency,
-      ] = await Promise.all([
-        this.getSuccessRate(network),
-        this.getTotalTransactions(network),
-        this.getStateSyncLatency(network),
-        this.getBlockPropagation(network),
-        this.getNodeResponseTime(network)
-      ])
-
-      return {
-        successRate,
-        totalTransactions,
-        proofGenTime,
-        stateSyncLatency,
-        reorgFrequency,
-      }
-    } catch (error) {
-      console.error(`Error fetching extended metrics for ${network}:`, error)
-      return {
-        successRate: 0,
-        totalTransactions: 0,
-        proofGenTime: 0,
-        stateSyncLatency: 0,
-        reorgFrequency: 0,
-        blockPropagation: 0,
-        nodeResponseTime: 0
-      }
-    }
-  }
-
-  async getSuccessRate(network: string): Promise<number> {
-    try {
-      const latestBlock = await this.cachedRequest(
-        network,
-        'latest-block',
-        () => this.providers[network].getBlock('latest')
-      )
-
-      if (!latestBlock) return 0
-
-      // Get last 5 blocks instead of 10 to reduce load
-      const blocks = await Promise.all(
-        Array.from({ length: 5 }, (_, i) => 
-          this.cachedRequest(
-            network,
-            `block-${latestBlock.number - i}`,
-            () => this.providers[network].getBlock(latestBlock.number - i, true)
-          )
-        )
-      )
-
-      let successfulTx = 0
-      let totalTx = 0
-
-      blocks.forEach(block => {
-        if (!block?.transactions) return
-        totalTx += block.transactions.length
-        successfulTx += block.transactions.length
+      console.log(`[${network}] Gas price:`, {
+        gweiPrice: gasPrice,
+        rawPrice: feeData.gasPrice?.toString()
       })
-
-      return totalTx === 0 ? 100 : (successfulTx / totalTx) * 100
+      
+      return gasPrice
     } catch (error) {
-      console.error(`Error calculating success rate for ${network}:`, error)
-      return 0
-    }
-  }
-
-  async getTotalTransactions(network: string): Promise<number> {
-    try {
-      const latestBlock = await this.cachedRequest(
-        network,
-        'latest-block',
-        () => this.providers[network].getBlock('latest')
-      )
-
-      if (!latestBlock) return 0
-
-      const prevBlock = await this.cachedRequest(
-        network,
-        `block-${latestBlock.number - 100}`, // Reduced from 1000 to 100 to prevent rate limiting
-        () => this.providers[network].getBlock(latestBlock.number - 100)
-      )
-
-      return prevBlock ? latestBlock.number - prevBlock.number : 0
-    } catch (error) {
-      console.error(`Error fetching total transactions for ${network}:`, error)
+      console.error(`[${network}] Error fetching gas costs:`, error)
       return 0
     }
   }
@@ -276,55 +136,17 @@ export class BlockchainMetrics {
   async getNetworkLatency(network: string): Promise<number> {
     try {
       const start = Date.now()
-      await this.cachedRequest(
-        network,
-        'network-latency',
-        () => this.providers[network].getBlockNumber()
-      )
-      return Date.now() - start
-    } catch (error) {
-      console.error(`Error measuring network latency for ${network}:`, error)
-      return 0
-    }
-  }
-
-  async getStateSyncLatency(network: string): Promise<number> {
-    try {
-      const start = Date.now()
-      const block1 = await this.providers[network].getBlockNumber()
-      await new Promise(resolve => setTimeout(resolve, 100))
-      const block2 = await this.providers[network].getBlockNumber()
-      return block2 > block1 ? Date.now() - start : 1000
-    } catch (error) {
-      return 1000
-    }
-  }
-
-  async getBlockPropagation(network: string): Promise<number> {
-    try {
-      const start = Date.now()
       const blockNumber = await this.providers[network].getBlockNumber()
-      const block = await this.providers[network].getBlock(blockNumber)
-      
-      if (!block) return 0
-      
-      const blockTimestamp = block.timestamp * 1000 // Convert to milliseconds
-      const propagationTime = start - blockTimestamp
-      
-      return Math.min(Math.max(propagationTime, 0), 10000)
-    } catch (error) {
-      console.error(`Error measuring block propagation for ${network}:`, error)
-      return 0
-    }
-  }
+      const latency = Date.now() - start
 
-  async getNodeResponseTime(network: string): Promise<number> {
-    try {
-      const start = Date.now()
-      await this.providers[network].getBlockNumber()
-      return Date.now() - start
+      console.log(`[${network}] Network latency:`, {
+        blockNumber,
+        latencyMs: latency
+      })
+
+      return latency
     } catch (error) {
-      console.error(`Error measuring node response time for ${network}:`, error)
+      console.error(`[${network}] Error measuring network latency:`, error)
       return 0
     }
   }

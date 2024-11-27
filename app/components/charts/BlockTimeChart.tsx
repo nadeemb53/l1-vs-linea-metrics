@@ -1,6 +1,6 @@
 'use client'
 
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { MetricData } from '@/types'
 import { formatBlockTime } from '@/lib/utils'
 
@@ -9,46 +9,63 @@ interface Props {
 }
 
 export function BlockTimeChart({ data }: Props) {
-  const formattedData = data.map(item => ({
-    timestamp: new Date(item.timestamp).getTime(),
-    blockTime: Number(item.value) || 0,
-    network: item.network,
-  }))
+  // Group data by timestamp to show parallel lines
+  const formattedData = data.reduce((acc: any[], curr) => {
+    const timestamp = new Date(curr.timestamp).getTime()
+    const existing = acc.find(item => item.timestamp === timestamp)
+    
+    if (existing) {
+      existing[curr.network] = curr.value
+    } else {
+      acc.push({
+        timestamp,
+        [curr.network]: curr.value
+      })
+    }
+    return acc
+  }, []).sort((a, b) => a.timestamp - b.timestamp)
 
-  const validData = formattedData.filter(d => d.blockTime >= 0 && d.blockTime <= 30)
+  // Calculate Y-axis domain with some padding
+  const maxBlockTime = Math.max(...data.map(d => d.value)) * 1.2
+  const minBlockTime = Math.max(0, Math.min(...data.map(d => d.value)) * 0.8)
 
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <ScatterChart width={500} height={300}>
+      <LineChart data={formattedData}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis
           dataKey="timestamp"
           tickFormatter={(value) => new Date(value).toLocaleTimeString()}
-          name="Time"
+          type="number"
+          domain={['dataMin', 'dataMax']}
         />
         <YAxis 
           label={{ value: 'Block Time (s)', angle: -90, position: 'insideLeft' }}
-          domain={[0, 'auto']}
+          domain={[minBlockTime, maxBlockTime]}
+          tickFormatter={(value) => value.toFixed(1)}
         />
         <Tooltip
-          cursor={{ strokeDasharray: '3 3' }}
-          formatter={(value: number) => [formatBlockTime(value), 'Block Time']}
           labelFormatter={(value) => new Date(value).toLocaleString()}
+          formatter={(value: number) => [formatBlockTime(value), 'Block Time']}
         />
         <Legend />
-        <Scatter
+        <Line
+          type="monotone"
+          dataKey="l2"
           name="L2"
-          data={validData.filter(d => d.network === 'l2')}
-          fill="#8884d8"
-          dataKey="blockTime"
+          stroke="#8884d8"
+          dot={false}
+          strokeWidth={2}
         />
-        <Scatter
+        <Line
+          type="monotone"
+          dataKey="linea"
           name="Linea"
-          data={validData.filter(d => d.network === 'linea')}
-          fill="#82ca9d"
-          dataKey="blockTime"
+          stroke="#82ca9d"
+          dot={false}
+          strokeWidth={2}
         />
-      </ScatterChart>
+      </LineChart>
     </ResponsiveContainer>
   )
 }

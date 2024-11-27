@@ -15,7 +15,17 @@ export async function POST(request: Request) {
     // Run tests for each network sequentially
     const results: Record<string, any> = {}
     for (const network of networks) {
-      results[network] = await stressTest.runTest(network, config)
+      const networkResults = await stressTest.runTest(network, config)
+      
+      // Serialize BigInt values before sending response
+      results[network] = {
+        ...networkResults,
+        transactions: networkResults.transactions.map(tx => ({
+          ...tx,
+          gasUsed: tx.gasUsed ? Number(tx.gasUsed) : undefined
+        })),
+        avgGasUsed: Number(networkResults.avgGasUsed)
+      }
     }
 
     return NextResponse.json(results)

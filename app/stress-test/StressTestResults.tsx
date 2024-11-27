@@ -1,72 +1,97 @@
+'use client'
+
+import { Card } from '@/app/components/ui/card'
 import { NetworkMetrics } from '@/types'
+import { formatTPS, formatBlockTime, formatGasPrice, formatPercent } from '@/lib/utils'
 
-interface StressTestResultsProps {
-  results: Record<string, NetworkMetrics>
-}
-
-export function StressTestResults({ results }: StressTestResultsProps) {
+export function StressTestResults({ results }: { results: Record<string, NetworkMetrics> }) {
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold mb-4">Test Results</h2>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {Object.entries(results).map(([network, metrics]) => (
-          <div key={network} className="bg-white rounded-lg p-4 shadow-sm">
-            <h3 className="text-lg font-medium mb-3 text-gradient">
-              {network.toUpperCase()} Results
-            </h3>
-            
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Avg TPS</span>
-                <span className="font-medium">{metrics.avgTps.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Success Rate</span>
-                <span className="font-medium">{metrics.successRate.toFixed(2)}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Avg Block Time</span>
-                <span className="font-medium">{metrics.avgBlockTime.toFixed(2)}s</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Avg Gas Used</span>
-                <span className="font-medium">{Number(metrics.avgGasUsed).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Total Transactions</span>
-                <span className="font-medium">{metrics.transactions.length}</span>
-              </div>
-            </div>
+      <h2 className="text-xl font-semibold">Test Results</h2>
 
-            <div className="mt-4">
-              <h4 className="font-medium mb-2">Recent Transactions</h4>
-              <div className="max-h-40 overflow-y-auto space-y-1">
-                {metrics.transactions.slice(-5).map((tx) => (
-                  <div 
-                    key={tx.hash}
-                    className={`text-sm p-1 rounded ${
-                      tx.status === 'success' ? 'bg-green-100' :
-                      tx.status === 'failed' ? 'bg-red-100' :
-                      'bg-yellow-100'
-                    }`}
-                  >
-                    <div className="truncate">
-                      {tx.hash}
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span>{tx.status}</span>
-                      {tx.blockTime && (
-                        <span>{tx.blockTime.toFixed(1)}s</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+      {Object.entries(results).map(([network, metrics]) => (
+        <Card key={network} className="p-6">
+          <h3 className="text-lg font-semibold mb-4">{network.toUpperCase()} Results</h3>
+          
+          {/* Summary Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div>
+              <div className="text-sm text-gray-600">Average TPS</div>
+              <div className="font-medium">{formatTPS(metrics.avgTps)}</div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-600">Success Rate</div>
+              <div className="font-medium">{formatPercent(metrics.successRate)}%</div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-600">Avg Block Time</div>
+              <div className="font-medium">{formatBlockTime(metrics.avgBlockTime)}s</div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-600">Avg Gas Used</div>
+              <div className="font-medium">{formatGasPrice(Number(metrics.avgGasUsed))}</div>
             </div>
           </div>
-        ))}
-      </div>
+
+          {/* Transaction List */}
+          <div className="mt-4">
+            <h4 className="font-medium mb-2">Transaction Details</h4>
+            <div className="max-h-[400px] overflow-y-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Hash</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Block</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Gas Used</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Time</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {metrics.transactions.map((tx) => (
+                    <tr key={tx.hash} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className={`inline-flex px-2 text-xs font-semibold rounded-full
+                          ${tx.status === 'success' 
+                            ? 'bg-green-100 text-green-800'
+                            : tx.status === 'failed'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-yellow-100 text-yellow-800'
+                          }`}
+                        >
+                          {tx.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-sm font-mono">
+                        <div className="truncate max-w-[150px]" title={tx.hash}>
+                          {tx.hash}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-sm">
+                        {tx.blockNumber || '-'}
+                      </td>
+                      <td className="px-3 py-2 text-sm">
+                        {tx.gasUsed ? formatGasPrice(Number(tx.gasUsed)) : '-'}
+                      </td>
+                      <td className="px-3 py-2 text-sm">
+                        {tx.blockTime ? `${tx.blockTime.toFixed(2)}s` : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Stats Summary */}
+          <div className="mt-6 text-sm text-gray-600">
+            <div>Total Transactions: {metrics.transactions.length}</div>
+            <div>Successful: {metrics.transactions.filter(tx => tx.status === 'success').length}</div>
+            <div>Failed: {metrics.transactions.filter(tx => tx.status === 'failed').length}</div>
+            <div>Pending: {metrics.transactions.filter(tx => tx.status === 'pending').length}</div>
+          </div>
+        </Card>
+      ))}
     </div>
   )
 }

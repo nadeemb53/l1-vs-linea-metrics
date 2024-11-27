@@ -6,31 +6,68 @@ import { StressTestForm } from './StressTestForm'
 import { StressTestProgress } from './StressTestProgress'
 import { StressTestResults } from './StressTestResults'
 import type { NetworkMetrics, StressTestConfig } from '@/types'
+import { storeStressTestResult } from '@/lib/metricsStorage'
 
 export default function StressTestPage() {
   const [isRunning, setIsRunning] = useState(false)
   const [progress, setProgress] = useState(0)
   const [results, setResults] = useState<Record<string, NetworkMetrics>>()
+  const [transactions, setTransactions] = useState<{
+    network: string
+    sent: number
+    pending: number
+    confirmed: number
+    failed: number
+    latestBlock?: number
+  }[]>([])
+  const [txLogs, setTxLogs] = useState<{
+    hash: string
+    network: string
+    status: 'pending' | 'success' | 'failed'
+    blockNumber?: number
+    timestamp: number
+  }[]>([])
 
   const handleStartTest = async (config: StressTestConfig) => {
     setIsRunning(true)
     setProgress(0)
     setResults(undefined)
+    setTransactions([])
+    setTxLogs([])
+    
+    let eventSource: EventSource | null = null;
     
     try {
-      // Start progress timer based on test duration
-      const startTime = Date.now()
-      const progressInterval = setInterval(() => {
-        const elapsed = (Date.now() - startTime) / 1000
-        const currentProgress = Math.min((elapsed / config.duration) * 100, 100)
-        setProgress(currentProgress)
-        
-        if (currentProgress >= 100) {
-          clearInterval(progressInterval)
-        }
-      }, 1000)
+      // Setup SSE before starting the test
+      eventSource = new EventSource('/api/stress-test/status')
+      
+      eventSource.onopen = () => {
+        console.log('SSE connection opened')
+      }
+      
+      eventSource.onerror = (error) => {
+        console.error('SSE error:', error)
+      }
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          console.log('SSE message:', data)
 
-      // Run the stress test
+          if (data.type === 'transactions') {
+            setTransactions(data.transactions)
+            if (data.transactions[0]?.progress) {
+              setProgress(data.transactions[0].progress)
+            }
+          } else if (data.type === 'txLog') {
+            setTxLogs(prev => [data.tx, ...prev].slice(0, 100))
+          }
+        } catch (error) {
+          console.error('Error parsing SSE message:', error)
+        }
+      }
+
+      // Start the stress test
       const response = await fetch('/api/stress-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -41,15 +78,24 @@ export default function StressTestPage() {
         throw new Error('Stress test failed')
       }
 
-      clearInterval(progressInterval)
-      setProgress(100)
-      
       const results = await response.json()
       setResults(results)
+
+      // Store stress test results
+      await storeStressTestResult({
+        duration: config.duration,
+        tps: config.tps,
+        transactionType: config.transactionType,
+        networks: config.networks
+      }, results)
+
     } catch (error) {
       console.error('Stress test failed:', error)
     } finally {
       setIsRunning(false)
+      if (eventSource) {
+        eventSource.close()
+      }
     }
   }
 
@@ -68,6 +114,8 @@ export default function StressTestPage() {
               progress={progress}
               isRunning={isRunning}
               selectedNetworks={results ? Object.keys(results) : []}
+              transactions={transactions}
+              txLogs={txLogs}
             />
           </Card>
         )}
