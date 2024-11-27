@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { StressTestConfig } from '../../types'
+import { StressTestConfig } from '@/types'
 
 interface StressTestFormProps {
   onStart: (config: StressTestConfig) => void

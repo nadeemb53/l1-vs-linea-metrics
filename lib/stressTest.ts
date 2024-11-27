@@ -1,6 +1,6 @@
 import { ethers } from 'ethers'
 import { networks } from './blockchain'
-import {TransactionInfo, NetworkMetrics, StressTestConfig} from './../types';
+import {TransactionInfo, NetworkMetrics, StressTestConfig} from '@/types';
 
 class NetworkStressTester {
   private currentNonce: number

@@ -3,10 +3,10 @@
 
 import { useState, useEffect } from 'react'
 import { Card } from '@/app/components/ui/card'
-import { formatDate, formatNumber, formatGasPrice, formatLatency, formatPercent, formatTPS } from '@/lib/utils'
-import { getStoredMetricsData, type StoredData } from '@/lib/metricsStorage'
+import { formatDate, formatGasPrice, formatLatency, formatPercent, formatTPS } from '@/lib/utils'
+import { getStoredMetricsData } from '@/lib/metricsStorage'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
-import { NetworkData } from '@/types'
+import { NetworkData, StoredData } from '@/types'
 
 export default function ReportsPage() {
   const [loading, setLoading] = useState(true)

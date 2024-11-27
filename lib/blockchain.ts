@@ -109,18 +109,10 @@ export class BlockchainMetrics {
 
       if (!block) return 0
 
-      const prevBlock = await this.cachedRequest(
-        network,
-        `block-${block.number - 10}`,
-        () => this.providers[network].getBlock(block!.number - 10)
-      )
+      const txCount = block.transactions.length
+      const timeSpan = 12 // Average block time in seconds, adjust if needed
 
-      if (!prevBlock) return 0
-
-      const txCount = block.number - prevBlock.number
-      const timeSpan = block.timestamp - prevBlock.timestamp
-
-      return timeSpan > 0 ? txCount / timeSpan : 0
+      return txCount / timeSpan
     } catch (error) {
       console.error(`Error calculating TPS for ${network}:`, error)
       return 0
@@ -137,13 +129,32 @@ export class BlockchainMetrics {
 
       if (!block) return 0
 
-      const prevBlock = await this.cachedRequest(
-        network,
-        `block-${block.number - 1}`,
-        () => this.providers[network].getBlock(block!.number - 1)
+      const prevBlocks = await Promise.all(
+        Array.from({ length: 5 }, (_, i) => 
+          this.cachedRequest(
+            network,
+            `block-${block.number - i - 1}`,
+            () => this.providers[network].getBlock(block.number - i - 1)
+          )
+        )
       )
 
-      return prevBlock ? block.timestamp - prevBlock.timestamp : 0
+      let totalTime = 0
+      let count = 0
+      
+      // Calculate time difference between consecutive blocks
+      for (let i = 0; i < prevBlocks.length - 1; i++) {
+        if (prevBlocks[i] && prevBlocks[i + 1]) {
+          const timeDiff = Math.abs(prevBlocks[i]!.timestamp - prevBlocks[i + 1]!.timestamp)
+          // Filter out anomalous values (> 30 seconds)
+          if (timeDiff <= 30) {
+            totalTime += timeDiff
+            count++
+          }
+        }
+      }
+
+      return count > 0 ? totalTime / count : 0
     } catch (error) {
       console.error(`Error calculating block time for ${network}:`, error)
       return 0
@@ -157,7 +168,8 @@ export class BlockchainMetrics {
         'gas-price',
         () => this.providers[network].getFeeData()
       )
-      return Number(feeData.gasPrice) || 0
+      
+      return feeData.gasPrice ? Number(feeData.gasPrice.toString()) : 0
     } catch (error) {
       console.error(`Error fetching gas costs for ${network}:`, error)
       return 0
@@ -293,31 +305,27 @@ export class BlockchainMetrics {
       const start = Date.now()
       const blockNumber = await this.providers[network].getBlockNumber()
       const block = await this.providers[network].getBlock(blockNumber)
-      return block ? Math.max(0, Date.now() - (block.timestamp * 1000)) : 1000
+      
+      if (!block) return 0
+      
+      const blockTimestamp = block.timestamp * 1000 // Convert to milliseconds
+      const propagationTime = start - blockTimestamp
+      
+      return Math.min(Math.max(propagationTime, 0), 10000)
     } catch (error) {
-      return 1000
+      console.error(`Error measuring block propagation for ${network}:`, error)
+      return 0
     }
   }
 
   async getNodeResponseTime(network: string): Promise<number> {
-    return this.getNetworkLatency(network)
-  }
-
-  private cleanCaches() {
-    const now = Date.now()
-    
-    // Clean block cache
-    Array.from(this.blockCache.entries()).forEach(([key, value]) => {
-      if (now - value.timestamp > 3600000) {
-        this.blockCache.delete(key)
-      }
-    })
-
-    // Clean request cache
-    Array.from(this.requestCache.entries()).forEach(([key, value]) => {
-      if (now - value.timestamp > 5000) {
-        this.requestCache.delete(key)
-      }
-    })
+    try {
+      const start = Date.now()
+      await this.providers[network].getBlockNumber()
+      return Date.now() - start
+    } catch (error) {
+      console.error(`Error measuring node response time for ${network}:`, error)
+      return 0
+    }
   }
 }

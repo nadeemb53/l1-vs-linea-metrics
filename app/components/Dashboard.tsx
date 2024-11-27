@@ -167,7 +167,7 @@ export function Dashboard() {
         </div>
       </section>
 
-      {/* Reliability Metrics Section */}
+      {/* Reliability Metrics Section
       <section>
         <h2 className="text-lg font-semibold mb-4 px-2">Reliability Metrics</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-2">
@@ -188,7 +188,7 @@ export function Dashboard() {
       </section>
 
       {/* Network Health Section */}
-      <section>
+      {/* <section>
         <h2 className="text-lg font-semibold mb-4 px-2">Network Health</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-2">
           <MetricsCard
@@ -206,7 +206,7 @@ export function Dashboard() {
             className="min-h-[160px]"
           />
         </div>
-      </section>
+      </section> */}
 
       {/* Charts Section */}
       <section>
@@ -230,14 +230,14 @@ export function Dashboard() {
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          {/* <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="p-4 sm:p-6">
               <h3 className="text-base sm:text-lg font-semibold mb-4">Success Rate</h3>
               <div className="w-full h-[300px] overflow-x-auto">
                 <SuccessRateChart data={data.successRate} />
               </div>
             </div>
-          </div>
+          </div> */}
           
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="p-4 sm:p-6">
@@ -266,7 +266,7 @@ export function Dashboard() {
             </div>
           </div> */}
 
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          {/* <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="p-4 sm:p-6">
               <h3 className="text-base sm:text-lg font-semibold mb-4">Node Metrics</h3>
               <div className="w-full h-[300px] overflow-x-auto">
@@ -277,7 +277,7 @@ export function Dashboard() {
                 />
               </div>
             </div>
-          </div>
+          </div> */}
 
           {/* <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="p-4 sm:p-6">

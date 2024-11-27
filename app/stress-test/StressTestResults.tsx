@@ -1,4 +1,4 @@
-import { NetworkMetrics } from './../../types'
+import { NetworkMetrics } from '@/types'
 
 interface StressTestResultsProps {
   results: Record<string, NetworkMetrics>

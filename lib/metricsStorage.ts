@@ -1,47 +1,6 @@
-// lib/metricsStorage.ts
-import { NetworkData } from '@/types'
+import { NetworkData, StoredData, StressTestResult } from '@/types'
 
 const STORAGE_KEY = 'network_metrics_data'
-
-export interface StressTestResult {
-  startTime: string
-  endTime: string
-  config: {
-    duration: number
-    tps: number
-    transactionType: string
-  }
-  results: {
-    [network: string]: {
-      avgTps: number
-      avgBlockTime: number
-      avgGasUsed: number
-      successRate: number
-      transactions: {
-        hash: string
-        timestamp: number
-        status: 'pending' | 'success' | 'failed'
-        gasUsed?: bigint
-        blockTime?: number
-      }[]
-    }
-  }
-}
-
-export interface StoredData {
-  timestamp: string
-  metrics: NetworkData
-  summaries: {
-    [network: string]: {
-      averageTPS: number
-      averageBlockTime: number
-      averageGasCost: number
-      averageLatency: number
-      successRate: number
-    }
-  }
-  stressTests?: StressTestResult[]
-}
 
 export function storeMetricsData(data: NetworkData) {
   try {

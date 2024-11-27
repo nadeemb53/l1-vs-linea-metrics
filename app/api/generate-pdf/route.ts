@@ -2,7 +2,6 @@
 import { NextResponse } from 'next/server'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
-import { StoredData } from '@/lib/metricsStorage'
 import { 
   formatTPS, 
   formatBlockTime, 
@@ -11,6 +10,7 @@ import {
   formatPercent,
   formatNumber 
 } from '@/lib/utils'
+import { StoredData } from '@/types'
 
 declare module 'jspdf' {
   interface jsPDF {

@@ -5,7 +5,7 @@ import { Card } from '@/app/components/ui/card'
 import { StressTestForm } from './StressTestForm'
 import { StressTestProgress } from './StressTestProgress'
 import { StressTestResults } from './StressTestResults'
-import type { NetworkMetrics, StressTestConfig } from './../../types'
+import type { NetworkMetrics, StressTestConfig } from '@/types'
 
 export default function StressTestPage() {
   const [isRunning, setIsRunning] = useState(false)
